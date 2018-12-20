@@ -5,6 +5,7 @@ import os
 import sys
 import os.path
 
+import time
 from time import sleep
 from datetime import datetime
 
@@ -26,10 +27,10 @@ from PIL import ImageOps
 
 
 width, height = 128, 74
-hidden = 100
-epoch_num = 3
-batchsize = 10
-gpu_id = -1
+hidden = 2048
+epoch_num = 100
+batchsize = 64
+gpu_id = 0
 
 
 class Autoencoder(chainer.Chain):
@@ -51,7 +52,13 @@ class Autoencoder(chainer.Chain):
 
 
 def train_autoencoder():
-    train = load_images('./train_data')
+    NAME_OUTPUTDIRECTORY = 'exp' + datetime.now().strftime("%Y%m%d%H%M")
+    FILENAME_MODEL = 'teru_Autoencoder.model'
+    FILENAME_RESULT = 'result.txt'
+    output_path = os.path.join('./result', NAME_OUTPUTDIRECTORY)
+    os.mkdir(output_path)
+
+    train = setup_images_dataset('./train_data')
     train_iter = chainer.iterators.SerialIterator(train, batchsize)
     model = Autoencoder(width * height, hidden)
 
@@ -77,61 +84,57 @@ def train_autoencoder():
             loss.backward()
             opt.update()
         loss_list.append(loss.array)
-        print('epoch' + str(int(epoch+1)) + ':' + str(loss.data))
-
-    NAME_OUTPUTDIRECTORY = 'exp' + datetime.now().strftime("%Y%m%d%H%M")
-    FILENAME_MODEL = 'teru_Autoencoder.model'
-    FILENAME_RESULT = 'result.txt'
-    output_path = os.path.join('./result', NAME_OUTPUTDIRECTORY)
-    os.mkdir(output_path)
+        print('epoch'+str(int(epoch+1))+':'+str(loss.data))
+        # ロス値のグラフを出力
+        plt.grid()
+        plt.tight_layout()
+        plt.plot([i for i, x in enumerate(loss_list, 1)], loss_list)
+        plt.savefig(os.path.join(output_path, 'loss'))
+    # 入力・出力画像のサンプルを保存
+    y = model.fwd(x)
+    save_image(x, 'input', output_path, gpu_id)
+    save_image(y.array, 'reconst', output_path, gpu_id)
     # モデルを保存
     model.to_cpu()
     serializers.save_npz(os.path.join(output_path, FILENAME_MODEL), model)
-    # テキストファイルに出力
+    # 条件をテキストファイルに出力
     with open(os.path.join(output_path, FILENAME_RESULT), mode='w') as f:
         f.write('width:'+str(width)+'\n')
         f.write('height:'+str(height)+'\n')
         f.write('hidden:'+str(hidden)+'\n')
         f.write('compression-rate:' +
-                str(round((hidden/(width*height))*100, 2))+'%')
-    # ロス値のグラフを出力
-    plt.plot([i for i, x in enumerate(loss_list, 1)], loss_list)
-    plt.grid()
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_path, 'loss'))
-    #plot(xp.asnumpy(x), a[0] + '/' + a[1] + 'data')
-    #plot(xp.asnumpy(y.data), a[0] + '/' + a[1] + 'reconstdata')
+                str(round((hidden/(width*height))*100, 2))+'%\n')
 
 
-def test_autoencoder(Model):
-    a = setup_dir('./result/' + '{0:%Y%m%d}'.format(datetime.datetime.now()),
-                  '{0:%Y%m%d%H}'.format(datetime.datetime.now()))
-    gpu_id = 0
+def test_autoencoder():
     model = Autoencoder(width*height, hidden)
-    serializers.load_npz(Model, model)
+    serializers.load_npz('./test/teru_Autoencoder.model', model)
 
-    def resize(img):
-        img = Image.fromarray(img.transpose(1, 2, 0))
+    def load_image(image_path):
+        img = Image.open(image_path)
         img = img.resize((width, height), Image.BICUBIC)
-        return np.asarray(img).transpose(2, 0, 1)
-
-    def transform(img):
-        img = img[:3, ...]
-        img = resize(img.astype(np.uint8))
+        img = np.asarray(img).transpose(2, 0, 1)
         img = img.astype(np.float32)
         img = img[0, :, :]
         img = img / 255
         img = img.reshape(-1)
         return img
 
-    test = './test.jpg'
-    image = Image.open(test)
-    # img.show()
-    y = model.fwd(transform(image))
+    img = load_image('./test/test.png')
+    x = np.array([img])
+    y = model.fwd(x)
+
+    im = y.array
+    im = im.reshape(height, width)
+    im = im * 255
+    im = im.astype(np.uint8)
+    pil_img = Image.fromarray(im)
+    pil_img.show()
+    pil_img.save('./test/output.png')
 
 
-def load_images(IMG_DIR):
-    image_files = glob.glob('{}/*.png'.format(IMG_DIR))
+def setup_images_dataset(IMG_DIR):
+    image_files = glob.glob('{}/*.jpg'.format(IMG_DIR))
     dataset = chainer.datasets.ImageDataset(image_files)
 
     def resize(img):
@@ -140,7 +143,6 @@ def load_images(IMG_DIR):
         return np.asarray(img).transpose(2, 0, 1)
 
     def transform(img):
-        img = img[:3, ...]
         img = resize(img.astype(np.uint8))
         img = img.astype(np.float32)
         img = img[0, :, :]
@@ -152,19 +154,21 @@ def load_images(IMG_DIR):
     return transformed_d
 
 
-def generate_image(data, savename, device=-1):
-
-    for i in range(16):
-
-        plt.figure()
-        plt.axis('off')
-        plt.imshow(data[i].reshape((height, width)),
-                   cmap=cm.gray, interpolation='nearest')
-        plt.savefig(saveName + 'data' + str(int(i)) + '.png')
+def save_image(data, savename, output_path, device=-1):
+    destination = os.path.join(output_path, savename)
+    os.mkdir(destination)
+    if device >= 0:
+        data = cuda.cupy.asnumpy(data)
+    for i in range(10):
+        im = data[i].reshape(height, width)
+        im = im * 255
+        pil_img = Image.fromarray(np.uint8(im)).convert('RGB')
+        pil_img.save(os.path.join(destination, str(int(i+1))+'.png'))
 
 
 def main():
-    train_autoencoder()
+    test_autoencoder()
+    #train_autoencoder()
 
 
 if __name__ == '__main__':
