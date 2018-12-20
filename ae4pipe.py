@@ -1,8 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import os
+import sys
+import os.path
 
-import sys, os.path
+from time import sleep
+from datetime import datetime
 
 import chainer
 from chainer import cuda
@@ -21,61 +25,92 @@ from PIL import Image
 from PIL import ImageOps
 
 
-#n_in, n_units
+width, height = 128, 74
+hidden = 100
+epoch_num = 3
+batchsize = 10
+gpu_id = -1
+
+
 class Autoencoder(chainer.Chain):
     def __init__(self, n_in, n_units):
         super(Autoencoder, self).__init__()
         with self.init_scope():
             self.l1 = L.Linear(None, n_units)
             self.l2 = L.Linear(None, n_in)
-        
+
     def __call__(self, x):
-        h1 = F.relu(self.l1(x))
-        h2 = F.relu(self.l2(h1))
-        return h2
-    
+        y = self.fwd(x)
+        loss = F.mean_squared_error(x, y)
+        return loss
 
-def train():
-    epoch_num = 300
-    batchsize = 32
-    gpu_id = -1
+    def fwd(self, x):
+        h = F.sigmoid(self.l1(x))
+        y = F.sigmoid(self.l2(h))
+        return y
 
+
+def train_autoencoder():
     train = load_images('./train_data')
     train_iter = chainer.iterators.SerialIterator(train, batchsize)
+    model = Autoencoder(width * height, hidden)
 
-    model = Autoencoder(28*28, 128)
-    
-    gpu = -1
-    if gpu >= 0:
-        chainer.cuda.get_device(gpu).use()
+    if gpu_id >= 0:
+        chainer.cuda.get_device(gpu_id).use()
         model.to_gpu()
-    
+        xp = cuda.cupy
+
     opt = chainer.optimizers.Adam()
     opt.setup(model)
-
+    loss_list = []
     train_num = len(train)
+
     for epoch in range(epoch_num):
         for i in range(0, train_num, batchsize):
             batch = train_iter.next()
-            x = np.asarray([s for s in batch])
-            y = model(x)
-            loss = F.mean_squared_error(x, y)
+            if gpu_id >= 0:
+                x = xp.asarray([s for s in batch])
+            else:
+                x = np.asarray([s for s in batch])
+            loss = model(x)
             model.cleargrads()
             loss.backward()
             opt.update()
+        loss_list.append(loss.array)
         print('epoch' + str(int(epoch+1)) + ':' + str(loss.data))
-        plot(x, y, './pict/teru_')
 
+    NAME_OUTPUTDIRECTORY = 'exp' + datetime.now().strftime("%Y%m%d%H%M")
+    FILENAME_MODEL = 'teru_Autoencoder.model'
+    FILENAME_RESULT = 'result.txt'
+    output_path = os.path.join('./result', NAME_OUTPUTDIRECTORY)
+    os.mkdir(output_path)
+    # モデルを保存
     model.to_cpu()
-    serializers.save_npz('teru_Autoencoder.model', model)
+    serializers.save_npz(os.path.join(output_path, FILENAME_MODEL), model)
+    # テキストファイルに出力
+    with open(os.path.join(output_path, FILENAME_RESULT), mode='w') as f:
+        f.write('width:'+str(width)+'\n')
+        f.write('height:'+str(height)+'\n')
+        f.write('hidden:'+str(hidden)+'\n')
+        f.write('compression-rate:' +
+                str(round((hidden/(width*height))*100, 2))+'%')
+    # ロス値のグラフを出力
+    plt.plot([i for i, x in enumerate(loss_list, 1)], loss_list)
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, 'loss'))
+    #plot(xp.asnumpy(x), a[0] + '/' + a[1] + 'data')
+    #plot(xp.asnumpy(y.data), a[0] + '/' + a[1] + 'reconstdata')
 
-   
-def load_images(IMG_DIR):
-    image_files = glob.glob('{}/*.jpg'.format(IMG_DIR))
-    dataset = chainer.datasets.ImageDataset(image_files)
+
+def test_autoencoder(Model):
+    a = setup_dir('./result/' + '{0:%Y%m%d}'.format(datetime.datetime.now()),
+                  '{0:%Y%m%d%H}'.format(datetime.datetime.now()))
+    gpu_id = 0
+    model = Autoencoder(width*height, hidden)
+    serializers.load_npz(Model, model)
 
     def resize(img):
-        width, height = 28, 28
         img = Image.fromarray(img.transpose(1, 2, 0))
         img = img.resize((width, height), Image.BICUBIC)
         return np.asarray(img).transpose(2, 0, 1)
@@ -84,7 +119,31 @@ def load_images(IMG_DIR):
         img = img[:3, ...]
         img = resize(img.astype(np.uint8))
         img = img.astype(np.float32)
-        img = img[0,:,:]
+        img = img[0, :, :]
+        img = img / 255
+        img = img.reshape(-1)
+        return img
+
+    test = './test.jpg'
+    image = Image.open(test)
+    # img.show()
+    y = model.fwd(transform(image))
+
+
+def load_images(IMG_DIR):
+    image_files = glob.glob('{}/*.png'.format(IMG_DIR))
+    dataset = chainer.datasets.ImageDataset(image_files)
+
+    def resize(img):
+        img = Image.fromarray(img.transpose(1, 2, 0))
+        img = img.resize((width, height), Image.BICUBIC)
+        return np.asarray(img).transpose(2, 0, 1)
+
+    def transform(img):
+        img = img[:3, ...]
+        img = resize(img.astype(np.uint8))
+        img = img.astype(np.float32)
+        img = img[0, :, :]
         img = img / 255
         img = img.reshape(-1)
         return img
@@ -93,22 +152,19 @@ def load_images(IMG_DIR):
     return transformed_d
 
 
-def plot(testData, testReconst, saveName):
-    for i in range(10):
-        data    = testData[i]
-        reconst = testReconst[i].array
-        
+def generate_image(data, savename, device=-1):
+
+    for i in range(16):
+
+        plt.figure()
         plt.axis('off')
-        plt.imshow(data.reshape(28, 28), cmap = cm.gray, interpolation = 'nearest')
+        plt.imshow(data[i].reshape((height, width)),
+                   cmap=cm.gray, interpolation='nearest')
         plt.savefig(saveName + 'data' + str(int(i)) + '.png')
-        
-        plt.axis('off')
-        plt.imshow(reconst.reshape(28, 28), cmap = cm.gray, interpolation = 'nearest')
-        plt.savefig(saveName + 'reconst' + str(int(i)) + '.png')
 
 
 def main():
-    train()
+    train_autoencoder()
 
 
 if __name__ == '__main__':
