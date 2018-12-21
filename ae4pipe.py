@@ -107,31 +107,25 @@ def train_autoencoder():
                 str(round((hidden/(width*height))*100, 2))+'%\n')
 
 
-def test_autoencoder():
-    model = Autoencoder(width*height, hidden)
-    serializers.load_npz('./test/teru_Autoencoder.model', model)
+def test_autoencoder(TEST_DIR, MODEL_NAME):
 
     def load_image(image_path):
-        img = Image.open(image_path)
-        img = img.resize((width, height), Image.BICUBIC)
-        img = np.asarray(img).transpose(2, 0, 1)
-        img = img.astype(np.float32)
-        img = img[0, :, :]
-        img = img / 255
-        img = img.reshape(-1)
-        return img
+            img = Image.open(image_path)
+            img = img.resize((width, height), Image.BICUBIC)
+            img = np.asarray(img).transpose(2, 0, 1)
+            img = img.astype(np.float32)
+            img = img[0, :, :]
+            img = img / 255
+            img = img.reshape(-1)
+            return img
 
-    img = load_image('./test/test.png')
-    x = np.array([img])
+    images_path_list = glob.glob('{}/*.jpg'.format(TEST_DIR))
+    images_array_list = [load_image(image_path) for image_path in images_path_list]
+    model = Autoencoder(width*height, hidden)
+    serializers.load_npz('./test/teru_Autoencoder.model', model)
+    x = np.asarray([s for s in images_array_list])
     y = model.fwd(x)
-
-    im = y.array
-    im = im.reshape(height, width)
-    im = im * 255
-    im = im.astype(np.uint8)
-    pil_img = Image.fromarray(im)
-    pil_img.show()
-    pil_img.save('./test/output.png')
+    save_image(y.array, 'output', './test/', -1)
 
 
 def setup_images_dataset(IMG_DIR):
