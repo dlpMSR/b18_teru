@@ -151,9 +151,12 @@ def setup_images_dataset(IMG_DIR):
 
 def save_image(data, savename, output_path, device=-1):
     destination = os.path.join(output_path, savename)
-    os.mkdir(destination)
+    if not os.path.exists(destination):
+        os.mkdir(destination)
+
     if device >= 0:
         data = cuda.cupy.asnumpy(data)
+        
     for i in range(10):
         im = data[i].reshape(height, width)
         im = im * 255
