@@ -52,8 +52,9 @@ class Autoencoder(chainer.Chain):
 
 
 def train_autoencoder():
-    NAME_OUTPUTDIRECTORY = 'exp' + datetime.now().strftime("%Y%m%d%H%M")
-    FILENAME_MODEL = 'teru_Autoencoder.model'
+    datetime_str = datetime.now().strftime("%Y%m%d%H%M")
+    NAME_OUTPUTDIRECTORY = 'exp' + datetime_str
+    FILENAME_MODEL = 'ae_' + datetime_str + '.model'
     FILENAME_RESULT = 'result.txt'
     output_path = os.path.join('./result', NAME_OUTPUTDIRECTORY)
     os.mkdir(output_path)
