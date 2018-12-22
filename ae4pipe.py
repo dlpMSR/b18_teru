@@ -41,14 +41,43 @@ class Autoencoder(chainer.Chain):
             self.l2 = L.Linear(None, n_in)
 
     def __call__(self, x):
-        y = self.fwd(x)
+        y = self.forward(x)
         loss = F.mean_squared_error(x, y)
         return loss
 
-    def fwd(self, x):
+    def forward(self, x):
         h = F.sigmoid(self.l1(x))
         y = F.sigmoid(self.l2(h))
         return y
+
+
+class ResizedImageDataset(object):
+    def __init__(self, path, size):
+        self.path = path
+        self.size = size
+
+    def load_images_as_dataset(self):
+        images_path_list = glob.glob('{}/*.jpg'.format(self.path))
+        dataset = chainer.datasets.ImageDataset(images_path_list)
+        dataset = chainer.datasets.TransformDataset(dataset, self.transform)
+        return dataset
+
+    def load_images_as_input(self):
+        images_path_list = glob.glob('{}/*.jpg'.format(self.path))
+        images_list = [Image.open(image_path) for image_path in images_path_list]
+        images_array_list = map(self.transform, images_list)
+        return np.asarray([s for s in images_array_list])
+
+    def transform(self, img):
+        img = Image.fromarray(img.transpose(1, 2, 0))
+        img = img.resize(self.size, Image.BICUBIC)
+        img = np.asarray(img).transpose(2, 0, 1)
+        img = img.astype(np.float32)
+        img = img[0, :, :]
+        img = img / 255
+        img = img.reshape(-1)
+        return img
+
 
 
 def train_autoencoder():
@@ -92,7 +121,7 @@ def train_autoencoder():
         plt.plot([i for i, x in enumerate(loss_list, 1)], loss_list)
         plt.savefig(os.path.join(output_path, 'loss'))
     # 入力・出力画像のサンプルを保存
-    y = model.fwd(x)
+    y = model.forward(x)
     save_image(x, 'input', output_path, gpu_id)
     save_image(y.array, 'reconst', output_path, gpu_id)
     # モデルを保存
@@ -124,7 +153,7 @@ def test_autoencoder(TEST_DIR, MODEL_NAME):
     model = Autoencoder(width*height, hidden)
     serializers.load_npz('./test/teru_Autoencoder.model', model)
     x = np.asarray([s for s in images_array_list])
-    y = model.fwd(x)
+    y = model.forward(x)
     save_image(y.array, 'output', './test/', -1)
 
 
