@@ -79,7 +79,6 @@ class ResizedImageDataset(object):
         return img
 
 
-
 def train_autoencoder():
     datetime_str = datetime.now().strftime("%Y%m%d%H%M")
     NAME_OUTPUTDIRECTORY = 'exp' + datetime_str
@@ -88,10 +87,11 @@ def train_autoencoder():
     output_path = os.path.join('./result', NAME_OUTPUTDIRECTORY)
     os.mkdir(output_path)
 
-    train = setup_images_dataset('./train_data')
-    train_iter = chainer.iterators.SerialIterator(train, batchsize)
     model = Autoencoder(width * height, hidden)
-
+    target = ResizedImageDataset('./train_data',(width, height))
+    train = target.load_images_as_dataset()
+    train_iter = chainer.iterators.SerialIterator(train, batchsize)
+    
     if gpu_id >= 0:
         chainer.cuda.get_device(gpu_id).use()
         model.to_gpu()
