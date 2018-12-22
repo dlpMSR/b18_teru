@@ -95,7 +95,6 @@ def train_autoencoder():
     if gpu_id >= 0:
         chainer.cuda.get_device(gpu_id).use()
         model.to_gpu()
-        xp = cuda.cupy
 
     opt = chainer.optimizers.Adam()
     opt.setup(model)
@@ -106,7 +105,7 @@ def train_autoencoder():
         for i in range(0, train_num, batchsize):
             batch = train_iter.next()
             if gpu_id >= 0:
-                x = xp.asarray([s for s in batch])
+                x = cuda.cupy.asarray([s for s in batch])
             else:
                 x = np.asarray([s for s in batch])
             loss = model(x)
