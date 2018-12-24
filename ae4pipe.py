@@ -66,13 +66,13 @@ class ResizedImageDataset(object):
         images_path_list = glob.glob('{}/*.jpg'.format(self.path))
         images_list = [Image.open(image_path)
                        for image_path in images_path_list]
-        images_list = [np.asarray(image) for image in images_list]
+        images_list = [np.asarray(image).transpose(2, 0, 1)
+                       for image in images_list]
         images_array_list = map(self.transform, images_list)
         return np.asarray([s for s in images_array_list])
 
     def transform(self, img):
-        #img = Image.fromarray(img.transpose(1, 2, 0))
-        img = img.transpose(1, 2, 0)
+        img = Image.fromarray(img.transpose(1, 2, 0))
         img = img.resize(self.size, Image.BICUBIC)
         img = np.asarray(img).transpose(2, 0, 1)
         img = img.astype(np.float32)
@@ -164,64 +164,6 @@ def test_autoencoder():
     y = model.forward(x)
 
     ResizedImageDataset.save_image(y.array, 'output', './test/', -1)
-
-
-'''
-    def load_image(image_path):
-        img = Image.open(image_path)
-        img = img.resize((width, height), Image.BICUBIC)
-        img = np.asarray(img).transpose(2, 0, 1)
-        img = img.astype(np.float32)
-        img = img[0, :, :]
-        img = img / 255
-        img = img.reshape(-1)
-        return img
-
-    images_path_list = glob.glob('{}/*.jpg'.format(TEST_DIR))
-    images_array_list = [load_image(image_path)
-                         for image_path in images_path_list]
-    model = Autoencoder(width*height, hidden)
-    serializers.load_npz('./test/teru_Autoencoder.model', model)
-    x = np.asarray([s for s in images_array_list])
-    y = model.forward(x)
-    save_image(y.array, 'output', './test/', -1)
-
-
-def setup_images_dataset(IMG_DIR):
-    image_files = glob.glob('{}/*.jpg'.format(IMG_DIR))
-    dataset = chainer.datasets.ImageDataset(image_files)
-
-    def resize(img):
-        img = Image.fromarray(img.transpose(1, 2, 0))
-        img = img.resize((width, height), Image.BICUBIC)
-        return np.asarray(img).transpose(2, 0, 1)
-
-    def transform(img):
-        img = resize(img.astype(np.uint8))
-        img = img.astype(np.float32)
-        img = img[0, :, :]
-        img = img / 255
-        img = img.reshape(-1)
-        return img
-
-    transformed_d = chainer.datasets.TransformDataset(dataset, transform)
-    return transformed_d
-
-
-def save_image(data, savename, output_path, device=-1):
-    destination = os.path.join(output_path, savename)
-    if not os.path.exists(destination):
-        os.mkdir(destination)
-
-    if device >= 0:
-        data = cuda.cupy.asnumpy(data)
-
-    for i in range(10):
-        im = data[i].reshape(height, width)
-        im = im * 255
-        pil_img = Image.fromarray(np.uint8(im)).convert('RGB')
-        pil_img.save(os.path.join(destination, str(int(i+1))+'.png'))
-'''
 
 
 def main():
