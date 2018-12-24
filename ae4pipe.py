@@ -27,9 +27,9 @@ from PIL import ImageOps
 
 
 width, height = 128, 74
-hidden = 2048
-epoch_num = 100
-batchsize = 64
+hidden = 4096
+epoch_num = 200
+batchsize = 128
 gpu_id = 0
 
 
@@ -72,6 +72,7 @@ class ResizedImageDataset(object):
         return np.asarray([s for s in images_array_list])
 
     def transform(self, img):
+        img = img.astype(np.uint8)
         img = Image.fromarray(img.transpose(1, 2, 0))
         img = img.resize(self.size, Image.BICUBIC)
         img = np.asarray(img).transpose(2, 0, 1)
@@ -84,17 +85,19 @@ class ResizedImageDataset(object):
     @staticmethod
     def save_image(data, savename, output_path, device=-1):
         destination = os.path.join(output_path, savename)
+        num = 1
         if not os.path.exists(destination):
             os.mkdir(destination)
 
         if device >= 0:
             data = cuda.cupy.asnumpy(data)
 
-        for i in range(10):
-            im = data[i].reshape(height, width)
+        for image in data:
+            im = image.reshape(height, width)
             im = im * 255
             pil_img = Image.fromarray(np.uint8(im)).convert('RGB')
-            pil_img.save(os.path.join(destination, str(int(i+1))+'.png'))
+            pil_img.save(os.path.join(destination, str(int(num+1))+'.png'))
+            num += num
 
 
 def train_autoencoder():
@@ -154,21 +157,19 @@ def train_autoencoder():
 
 
 def test_autoencoder():
-
     target = ResizedImageDataset('./test', (width, height))
     test = target.load_images_as_input()
     model = Autoencoder(width*height, hidden)
-    serializers.load_npz('./test/ae_201812240347.model', model)
-
+    serializers.load_npz('./test/ae_201812250527.model', model)
     x = np.asarray(test)
     y = model.forward(x)
-
+    ResizedImageDataset.save_image(x, 'input', './test/', -1)
     ResizedImageDataset.save_image(y.array, 'output', './test/', -1)
 
 
 def main():
-    test_autoencoder()
-    # train_autoencoder()
+    # test_autoencoder()
+    train_autoencoder()
 
 
 if __name__ == '__main__':
