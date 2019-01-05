@@ -147,6 +147,15 @@ def train_autoencoder():
     # モデルを保存
     model.to_cpu()
     serializers.save_npz(os.path.join(output_path, FILENAME_MODEL), model)
+    # テスト画像
+    target_test = ResizedImageDataset('./test_data', (width, height))
+    test = target_test.load_images_as_input()
+    x_test = np.asarray(test)
+    y_test = model.forward(x_test)
+    ResizedImageDataset.save_image(x_test, 'input_test',
+                                   output_path, -1)
+    ResizedImageDataset.save_image(y_test.array, 'reconst_test',
+                                   output_path, -1)
     # 条件をテキストファイルに出力
     with open(os.path.join(output_path, FILENAME_RESULT), mode='w') as f:
         f.write('width:'+str(width)+'\n')
