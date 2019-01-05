@@ -96,8 +96,8 @@ class ResizedImageDataset(object):
             im = image.reshape(height, width)
             im = im * 255
             pil_img = Image.fromarray(np.uint8(im)).convert('RGB')
-            pil_img.save(os.path.join(destination, str(int(num+1))+'.png'))
-            num += num
+            pil_img.save(os.path.join(destination, str(int(num))+'.png'))
+            num += 1
 
 
 def train_autoencoder():
